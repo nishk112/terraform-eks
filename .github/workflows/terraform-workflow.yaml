@@ -22,34 +22,43 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Get changed files
+      - name: Detect changed files
         id: files
         run: |
-          echo "CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})"
-          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            # First commit → consider all changed
+            echo "vpc=true" >> $GITHUB_ENV
+            echo "eks=true" >> $GITHUB_ENV
+            echo "node=true" >> $GITHUB_ENV
+          else
+            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            echo "CHANGED_FILES=$CHANGED" >> $GITHUB_ENV
 
-      - name: Set Terraform job flags
+            if echo "$CHANGED" | grep -E '^aws/vpc|^modules/vpc'; then
+              echo "vpc=true" >> $GITHUB_ENV
+            else
+              echo "vpc=false" >> $GITHUB_ENV
+            fi
+
+            if echo "$CHANGED" | grep -E '^aws/eks|^modules/eks'; then
+              echo "eks=true" >> $GITHUB_ENV
+            else
+              echo "eks=false" >> $GITHUB_ENV
+            fi
+
+            if echo "$CHANGED" | grep -E '^aws/node-group|^modules/node-group'; then
+              echo "node=true" >> $GITHUB_ENV
+            else
+              echo "node=false" >> $GITHUB_ENV
+            fi
+          fi
+
+      - name: Set outputs for other jobs
         id: filter
         run: |
-          vpc=false
-          eks=false
-          node=false
-
-          if echo "$CHANGED_FILES" | grep -E '^aws/vpc|^modules/vpc'; then
-            vpc=true
-          fi
-
-          if echo "$CHANGED_FILES" | grep -E '^aws/eks|^modules/eks'; then
-            eks=true
-          fi
-
-          if echo "$CHANGED_FILES" | grep -E '^aws/node-group|^modules/node-group'; then
-            node=true
-          fi
-
-          echo "::set-output name=vpc::$vpc"
-          echo "::set-output name=eks::$eks"
-          echo "::set-output name=node::$node"
+          echo "vpc=${{ env.vpc }}" >> $GITHUB_OUTPUT
+          echo "eks=${{ env.eks }}" >> $GITHUB_OUTPUT
+          echo "node=${{ env.node }}" >> $GITHUB_OUTPUT
 
   # -------------------------
   # VPC Job
@@ -66,7 +75,7 @@ jobs:
         run: |
           cd aws/vpc/dev/files
           terraform init
-          terraform apply -auto-approve
+          terraform plan
 
   # -------------------------
   # EKS Job
@@ -83,7 +92,7 @@ jobs:
         run: |
           cd aws/eks/dev/files
           terraform init
-          terraform apply -auto-approve
+          terraform plan
 
   # -------------------------
   # Node Group Job
@@ -100,4 +109,4 @@ jobs:
         run: |
           cd aws/node-group/dev/files
           terraform init
-          terraform apply -auto-approve
+          terraform plan
