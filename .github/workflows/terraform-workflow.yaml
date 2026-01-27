@@ -7,9 +7,9 @@ on:
       - "modules/vpc/**"
       - "aws/vpc/**"
       - "modules/eks/**"
-      - "aws/eks/dev/**"
+      - "aws/eks/**"
       - "modules/eks_node_group/**"
-      - "aws/node-group/dev/**"
+      - "aws/node-group/**"
 
   pull_request:
     paths:
@@ -22,11 +22,6 @@ on:
       - "aws/node-group/**"
 
   workflow_dispatch:
-    inputs:
-      run_all:
-        description: "Run all Terraform modules (bootstrap)"
-        required: false
-        default: "false"
 
 jobs:
   terraform:
@@ -34,7 +29,7 @@ jobs:
 
     steps:
       # ---------- Checkout ----------
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -44,57 +39,63 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       # ---------- AWS ----------
-      - name: Configure AWS Credentials
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      # ---------- Detect Changes ----------
-      - name: Detect changed modules
+      # ---------- Detect what changed ----------
+      - name: Detect changes
+        id: changes
         run: |
-          echo "VPC_CHANGED=false" >> $GITHUB_ENV
-          echo "EKS_CHANGED=false" >> $GITHUB_ENV
-          echo "NODE_CHANGED=false" >> $GITHUB_ENV
+          echo "VPC=false" >> $GITHUB_ENV
+          echo "EKS=false" >> $GITHUB_ENV
+          echo "NODE=false" >> $GITHUB_ENV
+          echo "RUN_ALL=false" >> $GITHUB_ENV
+
+          # Run all if workflow changed
+          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '^.github/workflows/'; then
+            echo "RUN_ALL=true" >> $GITHUB_ENV
+          fi
 
           if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -qE '^modules/vpc/|^aws/vpc/'; then
-            echo "VPC_CHANGED=true" >> $GITHUB_ENV
+            echo "VPC=true" >> $GITHUB_ENV
           fi
 
           if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -qE '^modules/eks/|^aws/eks/'; then
-            echo "EKS_CHANGED=true" >> $GITHUB_ENV
+            echo "EKS=true" >> $GITHUB_ENV
           fi
 
           if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -qE '^modules/eks_node_group/|^aws/node-group/'; then
-            echo "NODE_CHANGED=true" >> $GITHUB_ENV
+            echo "NODE=true" >> $GITHUB_ENV
+          fi
+
+          # Manual trigger always runs all
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RUN_ALL=true" >> $GITHUB_ENV
           fi
 
       # ---------- VPC ----------
-      - name: Terraform Init & Plan (VPC)
-        if: |
-          env.VPC_CHANGED == 'true' ||
-          github.event.inputs.run_all == 'true'
+      - name: Terraform VPC
+        if: env.VPC == 'true' || env.RUN_ALL == 'true'
         working-directory: aws/vpc/dev
         run: |
           terraform init
           terraform plan
 
       # ---------- EKS ----------
-      - name: Terraform Init & Plan (EKS)
-        if: |
-          env.EKS_CHANGED == 'true' ||
-          github.event.inputs.run_all == 'true'
+      - name: Terraform EKS
+        if: env.EKS == 'true' || env.RUN_ALL == 'true'
         working-directory: aws/eks/dev
         run: |
           terraform init
           terraform plan
 
       # ---------- Node Group ----------
-      - name: Terraform Init & Plan (Node Group)
-        if: |
-          env.NODE_CHANGED == 'true' ||
-          github.event.inputs.run_all == 'true'
+      - name: Terraform Node Group
+        if: env.NODE == 'true' || env.RUN_ALL == 'true'
         working-directory: aws/node-group/dev
         run: |
           terraform init
