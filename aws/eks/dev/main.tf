@@ -27,4 +27,3 @@ module "eks" {
 
   subnet_ids = var.subnet_ids
 }
-\
