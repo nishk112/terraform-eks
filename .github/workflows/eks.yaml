@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - "modules/eks/**"
-      - "aws/eks/**"
+      - "aws/eks/dev/**"
   pull_request:
     paths:
       - "modules/eks/**"
