@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - "modules/eks_node_group/**"
-      - "aws/node-group/**"
+      - "aws/node-group/dev/**"
   pull_request:
     paths:
       - "modules/eks_node_group/**"
