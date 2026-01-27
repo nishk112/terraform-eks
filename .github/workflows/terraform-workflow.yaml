@@ -21,8 +21,12 @@ on:
       - "modules/eks_node_group/**"
       - "aws/node-group/**"
 
-  # Manual trigger (VERY IMPORTANT for testing)
   workflow_dispatch:
+    inputs:
+      run_all:
+        description: "Run all Terraform modules (bootstrap)"
+        required: false
+        default: "false"
 
 jobs:
   terraform:
@@ -70,7 +74,7 @@ jobs:
       - name: Terraform Init & Plan (VPC)
         if: |
           env.VPC_CHANGED == 'true' ||
-          github.event.before == '0000000000000000000000000000000000000000'
+          github.event.inputs.run_all == 'true'
         working-directory: aws/vpc/dev
         run: |
           terraform init
@@ -80,7 +84,7 @@ jobs:
       - name: Terraform Init & Plan (EKS)
         if: |
           env.EKS_CHANGED == 'true' ||
-          github.event.before == '0000000000000000000000000000000000000000'
+          github.event.inputs.run_all == 'true'
         working-directory: aws/eks/dev
         run: |
           terraform init
@@ -90,7 +94,7 @@ jobs:
       - name: Terraform Init & Plan (Node Group)
         if: |
           env.NODE_CHANGED == 'true' ||
-          github.event.before == '0000000000000000000000000000000000000000'
+          github.event.inputs.run_all == 'true'
         working-directory: aws/node-group/dev
         run: |
           terraform init
