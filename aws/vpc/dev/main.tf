@@ -12,4 +12,3 @@ module "network" {
   private_subnet_id = module.vpc.private_subnet_ids[0]
 }
 
-#edit
