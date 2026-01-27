@@ -2,109 +2,102 @@ name: Terraform Dev Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - "aws/**"
-      - "modules/**"
+      - 'aws/**'
+      - 'modules/**'
   workflow_dispatch:
 
 jobs:
-
   # -------------------------
   # Detect what changed
   # -------------------------
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      vpc: ${{ steps.filter.outputs.vpc || 'false' }}
-      eks: ${{ steps.filter.outputs.eks || 'false' }}
-      node: ${{ steps.filter.outputs.node || 'false' }}
+      vpc: ${{ steps.filter.outputs.vpc }}
+      eks: ${{ steps.filter.outputs.eks }}
+      node: ${{ steps.filter.outputs.node }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - name: Detect changed paths
+      - name: Get changed files
+        id: files
+        run: |
+          echo "CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})"
+          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+
+      - name: Set Terraform job flags
         id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            vpc:
-              - 'modules/vpc/**'
-              - 'aws/vpc/**'
-            eks:
-              - 'modules/eks/**'
-              - 'aws/eks/**'
-            node:
-              - 'modules/eks_node_group/**'
-              - 'aws/node-group/**'
+        run: |
+          vpc=false
+          eks=false
+          node=false
+
+          if echo "$CHANGED_FILES" | grep -E '^aws/vpc|^modules/vpc'; then
+            vpc=true
+          fi
+
+          if echo "$CHANGED_FILES" | grep -E '^aws/eks|^modules/eks'; then
+            eks=true
+          fi
+
+          if echo "$CHANGED_FILES" | grep -E '^aws/node-group|^modules/node-group'; then
+            node=true
+          fi
+
+          echo "::set-output name=vpc::$vpc"
+          echo "::set-output name=eks::$eks"
+          echo "::set-output name=node::$node"
 
   # -------------------------
-  # VPC
+  # VPC Job
   # -------------------------
   vpc:
-    name: Terraform VPC
     needs: detect-changes
     if: needs.detect-changes.outputs.vpc == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: aws/vpc/dev
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
-      - run: terraform init
-      - run: terraform plan
+      - name: Terraform Init & Apply VPC
+        run: |
+          cd aws/vpc/dev/files
+          terraform init
+          terraform apply -auto-approve
 
   # -------------------------
-  # EKS
+  # EKS Job
   # -------------------------
   eks:
-    name: Terraform EKS
-    needs: detect-changes
+    needs: [detect-changes, vpc]
     if: needs.detect-changes.outputs.eks == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: aws/eks/dev
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
-      - run: terraform init
-      - run: terraform plan
+      - name: Terraform Init & Apply EKS
+        run: |
+          cd aws/eks/dev/files
+          terraform init
+          terraform apply -auto-approve
 
   # -------------------------
-  # NODE GROUP
+  # Node Group Job
   # -------------------------
   node-group:
-    name: Terraform Node Group
-    needs: detect-changes
+    needs: [detect-changes, eks]
     if: needs.detect-changes.outputs.node == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: aws/node-group/dev
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
-      - run: terraform init
-      - run: terraform plan
+      - name: Terraform Init & Apply Node Group
+        run: |
+          cd aws/node-group/dev/files
+          terraform init
+          terraform apply -auto-approve
