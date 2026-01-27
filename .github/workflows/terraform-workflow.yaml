@@ -9,9 +9,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # -------------------------
-  # Detect what changed
-  # -------------------------
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -21,92 +18,78 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0   # Full history for git diff
 
       - name: Detect changed files
         id: files
         run: |
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            # First commit → consider all changed
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} || echo "")
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            # First commit or empty diff → all true
             echo "vpc=true" >> $GITHUB_ENV
             echo "eks=true" >> $GITHUB_ENV
             echo "node=true" >> $GITHUB_ENV
           else
-            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-            echo "CHANGED_FILES=$CHANGED" >> $GITHUB_ENV
-
-            if echo "$CHANGED" | grep -E '^aws/vpc|^modules/vpc'; then
+            if echo "$CHANGED_FILES" | grep -qE '^aws/vpc|^modules/vpc'; then
               echo "vpc=true" >> $GITHUB_ENV
             else
               echo "vpc=false" >> $GITHUB_ENV
             fi
 
-            if echo "$CHANGED" | grep -E '^aws/eks|^modules/eks'; then
+            if echo "$CHANGED_FILES" | grep -qE '^aws/eks|^modules/eks'; then
               echo "eks=true" >> $GITHUB_ENV
             else
               echo "eks=false" >> $GITHUB_ENV
             fi
 
-            if echo "$CHANGED" | grep -E '^aws/node-group|^modules/node-group'; then
+            if echo "$CHANGED_FILES" | grep -qE '^aws/node-group|^modules/node-group'; then
               echo "node=true" >> $GITHUB_ENV
             else
               echo "node=false" >> $GITHUB_ENV
             fi
           fi
 
-      - name: Set outputs for other jobs
-        id: filter
-        run: |
-          echo "vpc=${{ env.vpc }}" >> $GITHUB_OUTPUT
-          echo "eks=${{ env.eks }}" >> $GITHUB_OUTPUT
-          echo "node=${{ env.node }}" >> $GITHUB_OUTPUT
+          echo "vpc=${vpc}" >> $GITHUB_OUTPUT
+          echo "eks=${eks}" >> $GITHUB_OUTPUT
+          echo "node=${node}" >> $GITHUB_OUTPUT
 
-  # -------------------------
-  # VPC Job
-  # -------------------------
   vpc:
     needs: detect-changes
     if: needs.detect-changes.outputs.vpc == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Terraform Init & Apply VPC
-        run: |
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: |
           cd aws/vpc/dev/files
           terraform init
-          terraform plan
+          terraform apply -auto-approve
 
-  # -------------------------
-  # EKS Job
-  # -------------------------
   eks:
     needs: [detect-changes, vpc]
     if: needs.detect-changes.outputs.eks == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Terraform Init & Apply EKS
-        run: |
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: |
           cd aws/eks/dev/files
           terraform init
-          terraform plan
+          terraform apply -auto-approve
 
-  # -------------------------
-  # Node Group Job
-  # -------------------------
   node-group:
     needs: [detect-changes, eks]
     if: needs.detect-changes.outputs.node == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Terraform Init & Apply Node Group
-        run: |
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: |
           cd aws/node-group/dev/files
           terraform init
-          terraform plan
+          terraform apply -auto-approve
