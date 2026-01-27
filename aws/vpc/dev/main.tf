@@ -8,7 +8,7 @@ module "vpc" {
 module "network" {
   source            = "../../../modules/network"
   vpc_id            = module.vpc.vpc_id
-  public_subnet_id  = module.vpc.public_subnet_id
-  private_subnet_id = module.vpc.private_subnet_id
+  public_subnet_id  = module.vpc.public_subnet_ids[0]
+  private_subnet_id = module.vpc.private_subnet_ids[0]
 }
 # demo push
