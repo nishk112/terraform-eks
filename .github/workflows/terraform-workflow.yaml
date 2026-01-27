@@ -1,0 +1,78 @@
+name: Terraform Dev Modules
+
+on:
+  push:
+    paths:
+      - "modules/vpc/**"
+      - "aws/vpc/**"
+      - "modules/eks/**"
+      - "aws/eks/dev/**"
+      - "modules/eks_node_group/**"
+      - "aws/node-group/dev/**"
+  pull_request:
+    paths:
+      - "modules/vpc/**"
+      - "aws/vpc/**"
+      - "modules/eks/**"
+      - "aws/eks/**"
+      - "modules/eks_node_group/**"
+      - "aws/node-group/**"
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Determine changed module
+        id: changes
+        run: |
+          echo "VPC_CHANGED=false" >> $GITHUB_ENV
+          echo "EKS_CHANGED=false" >> $GITHUB_ENV
+          echo "NODE_CHANGED=false" >> $GITHUB_ENV
+
+          if git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep -qE '^modules/vpc/|^aws/vpc/'; then
+            echo "VPC_CHANGED=true" >> $GITHUB_ENV
+          fi
+          if git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep -qE '^modules/eks/|^aws/eks/'; then
+            echo "EKS_CHANGED=true" >> $GITHUB_ENV
+          fi
+          if git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep -qE '^modules/eks_node_group/|^aws/node-group/'; then
+            echo "NODE_CHANGED=true" >> $GITHUB_ENV
+          fi
+
+      # ===== VPC Module =====
+      - name: Terraform Init & Plan (VPC)
+        if: ${{ env.VPC_CHANGED == 'true' || github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000' }}
+        working-directory: aws/vpc/dev
+        run: |
+          terraform init
+          terraform plan
+
+      # ===== EKS Module =====
+      - name: Terraform Init & Plan (EKS)
+        if: ${{ env.EKS_CHANGED == 'true' || github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000' }}
+        working-directory: aws/eks/dev
+        run: |
+          terraform init
+          terraform plan
+
+      # ===== Node Group Module =====
+      - name: Terraform Init & Plan (Node Group)
+        if: ${{ env.NODE_CHANGED == 'true' || github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000' }}
+        working-directory: aws/node-group/dev
+        run: |
+          terraform init
+          terraform plan
