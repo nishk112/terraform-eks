@@ -21,3 +21,5 @@ variable "vpc_id" {
 variable "subnet_ids" {
   type = list(string)
 }
+variable "aws_access_key" {}
+variable "aws_secret_key" {}
