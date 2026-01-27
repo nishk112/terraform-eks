@@ -11,3 +11,4 @@ module "network" {
   public_subnet_id  = module.vpc.public_subnet_id
   private_subnet_id = module.vpc.private_subnet_id
 }
+# demo push
