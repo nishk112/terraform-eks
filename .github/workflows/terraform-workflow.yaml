@@ -1,14 +1,20 @@
-name: Terraform Dev Pipeline
+name: Terraform Dev Workflow
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
+    paths:
+      - "modules/**"
+      - "aws/**"
+  pull_request:
     paths:
       - "modules/**"
       - "aws/**"
 
 jobs:
-
+# -------------------------------------------------
+# Detect what changed
+# -------------------------------------------------
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -18,58 +24,114 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dorny/paths-filter@v3
+      - name: Detect changed modules
         id: filter
+        uses: dorny/paths-filter@v3
         with:
           filters: |
             vpc:
-              - modules/vpc/**
-              - aws/vpc/**
-            eks:
-              - modules/eks/**
-              - aws/eks/**
-            node:
-              - modules/node-group/**
-              - aws/node-group/**
+              - "modules/vpc/**"
+              - "aws/vpc/**"
 
+            eks:
+              - "modules/eks/**"
+              - "aws/eks/**"
+
+            node:
+              - "modules/eks_node_group/**"
+              - "aws/node-group/**"
+
+# -------------------------------------------------
+# VPC
+# -------------------------------------------------
   vpc:
+    name: Terraform VPC
+    runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.vpc == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-
-      - name: VPC Apply
+    defaults:
+      run:
         working-directory: aws/vpc/dev
-        run: |
-          terraform init
-          terraform apply -auto-approve
 
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan
+
+# -------------------------------------------------
+# EKS (depends on VPC)
+# -------------------------------------------------
   eks:
+    name: Terraform EKS
+    runs-on: ubuntu-latest
     needs: [detect-changes, vpc]
-    if: needs.detect-changes.outputs.eks == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-
-      - name: EKS Apply
+    if: |
+      needs.detect-changes.outputs.eks == 'true' ||
+      needs.detect-changes.outputs.vpc == 'true'
+    defaults:
+      run:
         working-directory: aws/eks/dev
-        run: |
-          terraform init
-          terraform apply -auto-approve
 
-  node-group:
-    needs: [detect-changes, eks]
-    if: needs.detect-changes.outputs.node == 'true'
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: hashicorp/setup-terraform@v3
 
-      - name: Node Group Apply
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan
+
+# -------------------------------------------------
+# Node Group (depends on EKS + VPC)
+# -------------------------------------------------
+  node-group:
+    name: Terraform Node Group
+    runs-on: ubuntu-latest
+    needs: [detect-changes, eks]
+    if: |
+      needs.detect-changes.outputs.node == 'true' ||
+      needs.detect-changes.outputs.eks == 'true' ||
+      needs.detect-changes.outputs.vpc == 'true'
+    defaults:
+      run:
         working-directory: aws/node-group/dev
-        run: |
-          terraform init
-          terraform apply -auto-approve
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan
