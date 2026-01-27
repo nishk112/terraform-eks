@@ -16,9 +16,9 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      vpc: ${{ steps.filter.outputs.vpc }}
-      eks: ${{ steps.filter.outputs.eks }}
-      node: ${{ steps.filter.outputs.node }}
+      vpc: ${{ steps.filter.outputs.vpc || 'false' }}
+      eks: ${{ steps.filter.outputs.eks || 'false' }}
+      node: ${{ steps.filter.outputs.node || 'false' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -45,11 +45,9 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.vpc == 'true'
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: aws/vpc/dev
-
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -64,20 +62,16 @@ jobs:
       - run: terraform plan
 
   # -------------------------
-  # EKS (depends on VPC)
+  # EKS
   # -------------------------
   eks:
     name: Terraform EKS
-    needs: [detect-changes, vpc]
-    if: |
-      needs.detect-changes.outputs.eks == 'true' ||
-      needs.detect-changes.outputs.vpc == 'true'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.eks == 'true'
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: aws/eks/dev
-
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -92,21 +86,16 @@ jobs:
       - run: terraform plan
 
   # -------------------------
-  # NODE GROUP (depends on EKS + VPC)
+  # NODE GROUP
   # -------------------------
   node-group:
     name: Terraform Node Group
-    needs: [detect-changes, eks]
-    if: |
-      needs.detect-changes.outputs.node == 'true' ||
-      needs.detect-changes.outputs.eks == 'true' ||
-      needs.detect-changes.outputs.vpc == 'true'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.node == 'true'
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: aws/node-group/dev
-
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
