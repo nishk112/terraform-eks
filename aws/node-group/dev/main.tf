@@ -35,3 +35,4 @@ module "eks_node_group" {
   node_role_arn = aws_iam_role.eks_node_role.arn
   subnet_ids    = var.subnet_ids
 }
+#demo
