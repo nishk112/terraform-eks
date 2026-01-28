@@ -75,6 +75,9 @@ jobs:
 
       - name: Terraform plan
         run: terraform plan
+      
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
 # ---------------------------------------
 # 3. EKS
 # ---------------------------------------
@@ -104,6 +107,9 @@ jobs:
 
       - name: Terraform plan
         run: terraform plan
+      
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
 
 # ---------------------------------------
 # 4. NODE GROUP
@@ -134,3 +140,6 @@ jobs:
 
       - name: Terraform plan
         run: terraform plan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
