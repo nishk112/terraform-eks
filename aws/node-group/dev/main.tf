@@ -34,5 +34,6 @@ module "eks_node_group" {
   cluster_name  = var.cluster_name
   node_role_arn = aws_iam_role.eks_node_role.arn
   subnet_ids    = var.subnet_ids
+  vpc_id = data.terraform_remote_state.vpc.outputs.vpc_id
+  alb_sg_id = data.terraform_remote_state.eks.outputs.alb_sg_id
 }
-#demo

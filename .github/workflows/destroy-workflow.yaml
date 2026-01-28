@@ -1,8 +1,6 @@
 name: Terraform Workflow
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 env:
@@ -70,11 +68,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Terraform destroy
+        run: terraform destroy
 
-      - name: Terraform plan
-        run: terraform plan
 # ---------------------------------------
 # 3. EKS
 # ---------------------------------------
@@ -99,11 +95,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Terraform destroy
+        run: terraform destroy
 
-      - name: Terraform plan
-        run: terraform plan
 
 # ---------------------------------------
 # 4. NODE GROUP
@@ -129,8 +123,5 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform plan
-        run: terraform plan
+      - name: Terraform destroy
+        run: terraform destroy
