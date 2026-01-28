@@ -1,110 +1,136 @@
-name: "Deploy Infrastructure"
- 
+name: Terraform Dev Infrastructure
+
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      stack:
-        description: 'Stack to manage'
-        required: true
-        default: 'vpc'
-        type: choice
-        options:
-          - vpc
-          - eks
-          - both
-      action:
-        description: 'Terraform Action'
-        required: true
-        default: 'apply'
-        type: choice
-        options:
-          - apply
-          - destroy
- 
-permissions:
-  id-token: write
-  contents: read
- 
+
 env:
-  AWS_REGION: us-east-2
-  TF_VERSION: 1.5.0
- 
+  AWS_REGION: ap-south-1
+
 jobs:
- 
-  # 1. VPC STACK
- 
-  deploy-vpc:
-    name: "VPC Stack"
-    if: ${{ github.event.inputs.stack == 'vpc' || github.event.inputs.stack == 'both' }}
+# ---------------------------------------
+# 1. Detect changes
+# ---------------------------------------
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      vpc: ${{ steps.filter.outputs.vpc }}
+      eks: ${{ steps.filter.outputs.eks }}
+      node: ${{ steps.filter.outputs.node }}
+      first_run: ${{ steps.first.outputs.first }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect first commit
+        id: first
+        run: |
+          if [ "$(git rev-list --count HEAD)" = "1" ]; then
+            echo "first=true" >> $GITHUB_OUTPUT
+          else
+            echo "first=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect file changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            vpc:
+              - 'aws/vpc/**'
+              - 'modules/vpc/**'
+            eks:
+              - 'aws/eks/**'
+              - 'modules/eks/**'
+            node:
+              - 'aws/node-group/**'
+              - 'modules/node-group/**'
+
+# ---------------------------------------
+# 2. VPC
+# ---------------------------------------
+  vpc:
+    needs: detect
+    if: needs.detect.outputs.first_run == 'true' || needs.detect.outputs.vpc == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./Terraform/aws/vpc/dev
- 
+        working-directory: aws/vpc/dev
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
- 
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
- 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
- 
+
       - name: Terraform Init
         run: terraform init
- 
-      - name: Terraform Validate
-        run: terraform validate
- 
-      - name: Terraform Plan
-        run: terraform plan -input=false
- 
-      - name: Terraform Apply/Destroy
-        run: terraform ${{ github.event.inputs.action }} -auto-approve
- 
- 
-  # 2. EKS STACK
- 
-  deploy-eks:
-    name: "EKS Stack"
-    if: ${{ always() && (github.event.inputs.stack == 'eks' || (github.event.inputs.stack == 'both' && needs.deploy-vpc.result == 'success')) }}
-    needs: [deploy-vpc] 
+
+      - name: Terraform plan
+        run: terraform plan
+# ---------------------------------------
+# 3. EKS
+# ---------------------------------------
+  eks:
+    needs: [detect, vpc]
+    if: |
+      always() &&
+      (needs.detect.outputs.first_run == 'true' || needs.detect.outputs.eks == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./Terraform/aws/eks/dev
- 
+        working-directory: aws/eks/dev
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
- 
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
- 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
- 
+
       - name: Terraform Init
         run: terraform init
- 
-      - name: Terraform Validate
-        run: terraform validate
- 
-      - name: Terraform Plan
-        run: terraform plan -input=false
- 
-      - name: Terraform Apply/Destroy
-        run: terraform ${{ github.event.inputs.action }} -auto-approve
+
+      - name: Terraform plan
+        run: terraform plan
+
+# ---------------------------------------
+# 4. NODE GROUP
+# ---------------------------------------
+  node-group:
+    needs: [detect, eks]
+    if: |
+      always() &&
+      (needs.detect.outputs.first_run == 'true' || needs.detect.outputs.node == 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aws/node-group/dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform plan
+        run: terraform plan
